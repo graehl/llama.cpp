@@ -1360,6 +1360,10 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
         sparams.penalize_nl = true;
         return true;
     }
+    if (arg == "--stop-nl") {
+        sparams.stop_nl = true;
+        return true;
+    }
     if (arg == "-l" || arg == "--logit-bias") {
         CHECK_ARG
         std::stringstream ss(argv[i]);
@@ -1842,6 +1846,7 @@ void gpt_params_print_usage(int /*argc*/, char ** argv, const gpt_params & param
                                                                         "simplified sequence for samplers that will be used (default: %s)", sampler_type_chars.c_str() });
     options.push_back({ "*",           "       --ignore-eos",           "ignore end of stream token and continue generating (implies --logit-bias EOS-inf)" });
     options.push_back({ "*",           "       --penalize-nl",          "penalize newline tokens (default: %s)", sparams.penalize_nl ? "true" : "false" });
+    options.push_back({ "*",           "       --stop-nl",          "stop generating (in non-interactive/assistant context) after newline token (default: %s)", sparams.stop_nl ? "true" : "false" });
     options.push_back({ "*",           "       --temp N",               "temperature (default: %.1f)", (double)sparams.temp });
     options.push_back({ "*",           "       --top-k N",              "top-k sampling (default: %d, 0 = disabled)", sparams.top_k });
     options.push_back({ "*",           "       --top-p N",              "top-p sampling (default: %.1f, 1.0 = disabled)", (double)sparams.top_p });
@@ -3561,6 +3566,7 @@ void yaml_dump_non_result_info(FILE * stream, const gpt_params & params, const l
     fprintf(stream, "batch_size: %d # default: 512\n", params.n_batch);
     yaml_dump_string_multiline(stream, "cfg_negative_prompt", sparams.cfg_negative_prompt.c_str());
     fprintf(stream, "cfg_scale: %f # default: 1.0\n", sparams.cfg_scale);
+    fprintf(stream, "cfg_negative_prompt: %s\n", sparams.cfg_negative_prompt);
     fprintf(stream, "chunks: %d # default: -1 (unlimited)\n", params.n_chunks);
     fprintf(stream, "color: %s # default: false\n", params.use_color ? "true" : "false");
     fprintf(stream, "ctx_size: %d # default: 512\n", params.n_ctx);

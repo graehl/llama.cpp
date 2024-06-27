@@ -11,6 +11,7 @@
 #include <forward_list>
 #include <queue>
 #include <sstream>
+#include <type_traits>
 
 //
 // helpers

@@ -121,10 +121,10 @@ std::string llama_sampling_print(const llama_sampling_params & params) {
     snprintf(result, sizeof(result),
             "\trepeat_last_n = %d, repeat_penalty = %.3f, frequency_penalty = %.3f, presence_penalty = %.3f\n"
             "\ttop_k = %d, tfs_z = %.3f, top_p = %.3f, min_p = %.3f, typical_p = %.3f, temp = %.3f\n"
-            "\tmirostat = %d, mirostat_lr = %.3f, mirostat_ent = %.3f",
+            "\tmirostat = %d, mirostat_lr = %.3f, mirostat_ent = %.3f, cfg_scale = %.3f, stop_nl = %d",
             params.penalty_last_n, params.penalty_repeat, params.penalty_freq, params.penalty_present,
             params.top_k, params.tfs_z, params.top_p, params.min_p, params.typical_p, params.temp,
-            params.mirostat, params.mirostat_eta, params.mirostat_tau);
+             params.mirostat, params.mirostat_eta, params.mirostat_tau, params.cfg_scale, (int)params.stop_nl);
 
     return std::string(result);
 }

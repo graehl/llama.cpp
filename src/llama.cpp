@@ -16915,8 +16915,8 @@ static void llama_model_quantize_internal(const std::string & fname_inp, const s
             llama_split_path(split_path, sizeof(split_path), fname_out.c_str(), cur_split, n_split);
             fname = std::string(split_path);
         }
-
-        fout = std::ofstream(fname, std::ios::binary);
+        fout.clear();
+        fout.open(fname, std::ios::binary);
         fout.exceptions(std::ofstream::failbit); // fail fast on write errors
         const size_t meta_size = gguf_get_meta_size(ctx_outs[cur_split]);
         // placeholder for the meta data

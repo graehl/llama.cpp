@@ -42,6 +42,7 @@ typedef struct llama_sampling_params {
     bool        penalize_nl           = false;              // consider newlines as a repeatable token
     uint32_t    seed                  = LLAMA_DEFAULT_SEED; // the seed used to initialize llama_sampling_context
 
+    bool stop_nl = false; // stop after first newline
     std::vector<llama_sampler_type> samplers_sequence = {
         llama_sampler_type::TOP_K,
         llama_sampler_type::TFS_Z,

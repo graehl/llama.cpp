@@ -777,9 +777,11 @@ int main(int argc, char ** argv) {
             // echo this to console
             input_echo = true;
 
-            // decrement remaining sampling budget
-            --n_remain;
-
+            if (sparams.stop_nl && llama_token_to_piece(ctx, id).find('\n') != std::string::npos)
+              n_remain = 0;
+            else
+              // decrement remaining sampling budget
+              --n_remain;
             LOG("n_remain: %d\n", n_remain);
         } else {
             // some user input remains from prompt or interaction, forward it to processing
