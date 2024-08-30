@@ -3566,7 +3566,7 @@ void yaml_dump_non_result_info(FILE * stream, const gpt_params & params, const l
     fprintf(stream, "batch_size: %d # default: 512\n", params.n_batch);
     yaml_dump_string_multiline(stream, "cfg_negative_prompt", sparams.cfg_negative_prompt.c_str());
     fprintf(stream, "cfg_scale: %f # default: 1.0\n", sparams.cfg_scale);
-    fprintf(stream, "cfg_negative_prompt: %s\n", sparams.cfg_negative_prompt);
+    fprintf(stream, "cfg_negative_prompt: %s\n", sparams.cfg_negative_prompt.c_str());
     fprintf(stream, "chunks: %d # default: -1 (unlimited)\n", params.n_chunks);
     fprintf(stream, "color: %s # default: false\n", params.use_color ? "true" : "false");
     fprintf(stream, "ctx_size: %d # default: 512\n", params.n_ctx);
