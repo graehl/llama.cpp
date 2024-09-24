@@ -1,5 +1,4 @@
-#include "ggml.h"
-#include "gguf.h"
+#include "gguf-ctx.hpp"
 
 #include <cstdio>
 #include <string>
@@ -19,65 +18,13 @@ static std::string to_string(const T & val) {
 }
 
 static bool gguf_ex_write(const std::string & fname) {
-    struct gguf_context * ctx = gguf_init_empty();
+    ggml_context_ptr ctx_data;
 
-    gguf_set_val_u8  (ctx, "some.parameter.uint8",    0x12);
-    gguf_set_val_i8  (ctx, "some.parameter.int8",    -0x13);
-    gguf_set_val_u16 (ctx, "some.parameter.uint16",   0x1234);
-    gguf_set_val_i16 (ctx, "some.parameter.int16",   -0x1235);
-    gguf_set_val_u32 (ctx, "some.parameter.uint32",   0x12345678);
-    gguf_set_val_i32 (ctx, "some.parameter.int32",   -0x12345679);
-    gguf_set_val_f32 (ctx, "some.parameter.float32",  0.123456789f);
-    gguf_set_val_u64 (ctx, "some.parameter.uint64",   0x123456789abcdef0ull);
-    gguf_set_val_i64 (ctx, "some.parameter.int64",   -0x123456789abcdef1ll);
-    gguf_set_val_f64 (ctx, "some.parameter.float64",  0.1234567890123456789);
-    gguf_set_val_bool(ctx, "some.parameter.bool",     true);
-    gguf_set_val_str (ctx, "some.parameter.string",   "hello world");
+    gguf_context_ptr ctx{gguf_ex_ctx(ctx_data)};
 
-    gguf_set_arr_data(ctx, "some.parameter.arr.i16", GGUF_TYPE_INT16,   std::vector<int16_t>{ 1, 2, 3, 4, }.data(), 4);
-    gguf_set_arr_data(ctx, "some.parameter.arr.f32", GGUF_TYPE_FLOAT32, std::vector<float>{ 3.145f, 2.718f, 1.414f, }.data(), 3);
-    gguf_set_arr_str (ctx, "some.parameter.arr.str",                    std::vector<const char *>{ "hello", "world", "!" }.data(), 3);
-
-    struct ggml_init_params params = {
-        /*.mem_size   =*/ 128ull*1024ull*1024ull,
-        /*.mem_buffer =*/ NULL,
-        /*.no_alloc   =*/ false,
-    };
-
-    struct ggml_context * ctx_data = ggml_init(params);
-
-    const int n_tensors = 10;
-
-    // tensor infos
-    for (int i = 0; i < n_tensors; ++i) {
-        const std::string name = "tensor_" + to_string(i);
-
-        int64_t ne[GGML_MAX_DIMS] = { 1 };
-        int32_t n_dims = rand() % GGML_MAX_DIMS + 1;
-
-        for (int j = 0; j < n_dims; ++j) {
-            ne[j] = rand() % 10 + 1;
-        }
-
-        struct ggml_tensor * cur = ggml_new_tensor(ctx_data, GGML_TYPE_F32, n_dims, ne);
-        ggml_set_name(cur, name.c_str());
-
-        {
-            float * data = (float *) cur->data;
-            for (int j = 0; j < ggml_nelements(cur); ++j) {
-                data[j] = 100 + i;
-            }
-        }
-
-        gguf_add_tensor(ctx, cur);
-    }
-
-    gguf_write_to_file(ctx, fname.c_str(), false);
+    gguf_write_to_file(ctx.get(), fname.c_str(), false);
 
     printf("%s: wrote file '%s;\n", __func__, fname.c_str());
-
-    ggml_free(ctx_data);
-    gguf_free(ctx);
 
     return true;
 }
@@ -216,8 +163,8 @@ static bool gguf_ex_read_1(const std::string & fname, bool check_data) {
             if (check_data) {
                 const float * data = (const float *) cur->data;
                 for (int j = 0; j < ggml_nelements(cur); ++j) {
-                    if (data[j] != 100 + i) {
-                        fprintf(stderr, "%s: tensor[%d], data[%d]: found %f, expected %f\n", __func__, i, j, data[j], float(100 + i));
+                    if (data[j] != 100 + i + j) {
+                        fprintf(stderr, "%s: tensor[%d], data[%d]: found %f, expected %f\n", __func__, i, j, data[j], float(100 + i + j));
                         gguf_free(ctx);
                         return false;
                     }
