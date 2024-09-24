@@ -64,6 +64,7 @@ add_library(${TARGET} STATIC
     log.h
     ngram-cache.cpp
     ngram-cache.h
+    numpy.cpp
     sampling.cpp
     sampling.h
     train.cpp
