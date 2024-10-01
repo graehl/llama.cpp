@@ -1,3 +1,4 @@
+#include "arg.h"
 #include "common.h"
 
 #include <cassert>
@@ -10,7 +11,6 @@
 #include <iostream>
 #include <string>
 #include <vector>
-
 #if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
 #include <signal.h>
 #include <unistd.h>
@@ -43,15 +43,22 @@ inline bool has_nl(char const* txt) {
   char const* s = txt;
   for (; *s; ++s)
     if (*s == '\n') {
-      LOG("nl: %s\n", txt);
+      LLAMA_LOG_INFO("nl: %s\n", txt);
       return true;
     }
-  LOG("no newline: %s\n", txt);
+  LLAMA_LOG_INFO("no newline: %s\n", txt);
   return false;
 }
 
 inline bool has_nl(std::string const& txt) {
   return txt.find('\n') != std::string::npos;
+}
+
+static void beam_print_usage(int argc, char** argv) {
+  printf(
+      "Usage: %s [BEAM_WIDTH=2] [llama-cli args CARE: most are ineffective in beam search, try -f "
+      "promptfile -m model.gguf --override-kv tokenizer.ggml.pre=str:llama3 ]\n",
+      argv[0]);
 }
 
 // Put here anything you want back in beam_search_callback().
@@ -74,10 +81,10 @@ struct beam_search_callback_data {
 
   void init() {
     model = llama_get_model(ctx);
-    LOG("nl ends generation: %d", eob_nl);
+    LLAMA_LOG_INFO("nl ends generation: %d", eob_nl);
     if (eob_nl && model) {
       nl_tok = llama_token_nl(model);
-      LOG("nl token id: %d text: '%s'\n", nl_tok, text(nl_tok));
+      LLAMA_LOG_INFO("nl token id: %d text: '%s'\n", nl_tok, text(nl_tok));
     }
   }
 
@@ -138,15 +145,8 @@ int main(int argc, char** argv) {
   bool have_beam = have_arg && beam_arg && beam_arg[0] != '-';
 
   gpt_params params;
-  char const* main_name = argv[0];
-  if (!have_beam || !gpt_params_parse(argc - 1, argv + 1, params)) {
-    printf(
-        "Usage: %s [BEAM_WIDTH=2] [llama-cli args CARE: most are ineffective in beam search, try -f "
-        "promptfile -m model.gguf --override-kv tokenizer.ggml.pre=str:llama3 ]\n",
-        main_name);
-    gpt_params_print_usage(argc, argv, params);
+  if (!have_beam || !gpt_params_parse(argc - 1, argv + 1, params, LLAMA_EXAMPLE_COMMON, beam_print_usage))
     return 1;
-  }
 
   //---------------------------------
   // Load parameters :
@@ -176,11 +176,11 @@ int main(int argc, char** argv) {
   // Tokenize the prompt :
   //---------------------------------
 
-  const bool add_bos = llama_should_add_bos_token(model);
+  const bool add_bos = llama_add_bos_token(model);
   if (!llama_model_has_encoder(model)) {
     GGML_ASSERT(llama_add_eos_token(model) != 1);
   }
-  LOG("add_bos: %d\n", add_bos);
+  LLAMA_LOG_INFO("add_bos: %d\n", add_bos);
 
   std::vector<llama_token> embd_inp = llama_tokenize(ctx, params.prompt, true, true);
 
@@ -188,10 +188,9 @@ int main(int argc, char** argv) {
   if (embd_inp.empty()) {
     if (add_bos) {
       embd_inp.push_back(llama_token_bos(model));
-      LOG("embd_inp was considered empty and bos was added: %s\n",
-          LOG_TOKENS_TOSTR_PRETTY(ctx, embd_inp).c_str());
+      LLAMA_LOG_INFO("embd_inp was considered empty and bos was added\n");
     } else {
-      LOG_TEE("error: input is empty\n");
+      LLAMA_LOG_ERROR("error: input is empty\n");
       return -1;
     }
   }
