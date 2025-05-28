@@ -18,7 +18,7 @@ int main(int argc, char ** argv) {
 
     params.escape = false;
 
-    if (!common_params_parse(argc, argv, params, LLAMA_EXAMPLE_PERPLEXITY)) {
+    if (!common_params_parse(argc, argv, params, LLAMA_EXAMPLE_FINETUNE)) {
         return 1;
     }
 
@@ -60,8 +60,8 @@ int main(int argc, char ** argv) {
     std::vector<llama_token> tokens = common_tokenize(ctx.get(), params.prompt, true);
     ggml_opt_dataset_t dataset = common_opt_dataset_init(ctx.get(), tokens, llama_n_ctx(ctx.get())/2);
 
-    struct ggml_opt_optimizer_params optimizer_params = ggml_opt_get_default_optimizer_params(nullptr);
-    optimizer_params.adamw.alpha = 1e-7f; // learning rate
+    struct ggml_opt_optimizer_params & optimizer_params = params.optimize;
+    LOG_INF("-optimizer %d -lr: %.1f", optimizer_params.optimizer, (double) optimizer_params.adamw.alpha);
 
     struct llama_opt_params lopt_params {
         /*n_ctx_train     =*/ 0,

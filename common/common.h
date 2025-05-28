@@ -2,13 +2,14 @@
 
 #pragma once
 
-#include "llama-cpp.h"
-
 #include <set>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
-#include <sstream>
+
+#include "ggml-opt.h"
+#include "llama-cpp.h"
 
 #ifdef _WIN32
 #define DIRECTORY_SEPARATOR '\\'
@@ -80,6 +81,7 @@ enum llama_example {
     LLAMA_EXAMPLE_LOOKUP,
     LLAMA_EXAMPLE_PARALLEL,
     LLAMA_EXAMPLE_TTS,
+    LLAMA_EXAMPLE_FINETUNE,
 
     LLAMA_EXAMPLE_COUNT,
 };
@@ -349,6 +351,8 @@ struct common_params {
     bool no_mmproj = false;         // explicitly disable multimodal model
     std::vector<std::string> image; // path to image file(s)
 
+    // finetune
+    struct ggml_opt_optimizer_params optimize;
     // embedding
     bool embedding         = false; // get only sentence embedding
     int32_t embd_normalize = 2;     // normalisation for embeddings (-1=none, 0=max absolute int16, 1=taxicab, 2=euclidean, >2=p-norm)

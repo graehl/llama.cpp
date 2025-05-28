@@ -228,8 +228,30 @@ struct ggml_opt_optimizer_params ggml_opt_get_default_optimizer_params(void * us
     result.adamw.beta2 = 0.999f;
     result.adamw.eps   = 1e-8f;
     result.adamw.wd    = 0.0f;
+    result.optimizer   = GGML_OPT_OPTIMIZER_ADAMW;
 
     return result;
+}
+
+GGML_API const char * ggml_opt_optimizer_name(enum ggml_opt_optimizer o) {
+    switch (o) {
+        case GGML_OPT_OPTIMIZER_ADAMW:
+            return "adamw";
+        case GGML_OPT_OPTIMIZER_SGD:
+            return "sgd";
+        default:
+            return "undefined";
+    };
+}
+
+GGML_API enum ggml_opt_optimizer named_ggml_opt_optimizer(const char * n) {
+    if (!strcasecmp("adamw", n)) {
+        return GGML_OPT_OPTIMIZER_ADAMW;
+    } else if (!strcasecmp("sgd", n)) {
+        return GGML_OPT_OPTIMIZER_SGD;
+    } else {
+        return GGML_OPT_OPTIMIZER_COUNT;
+    }
 }
 
 struct ggml_opt_optimizer_params ggml_opt_get_constant_optimizer_params(void * userdata) {

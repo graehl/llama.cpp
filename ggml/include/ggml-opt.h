@@ -74,6 +74,17 @@ extern "C" {
         GGML_OPT_BUILD_TYPE_OPT     = 30,
     };
 
+    enum ggml_opt_optimizer {
+        GGML_OPT_OPTIMIZER_ADAMW,
+        GGML_OPT_OPTIMIZER_SGD,
+
+        GGML_OPT_OPTIMIZER_COUNT
+    };
+
+    // "adamw" or "sgd" (case insensitive)
+    GGML_API const char *            ggml_opt_optimizer_name(enum ggml_opt_optimizer);
+    GGML_API enum ggml_opt_optimizer named_ggml_opt_optimizer(const char *);
+
     // parameters that control which optimizer is used and how said optimizer tries to find the minimal loss
     struct ggml_opt_optimizer_params {
         // AdamW optimizer parameters
@@ -84,6 +95,7 @@ extern "C" {
             float eps;   // epsilon for numerical stability
             float wd;    // weight decay for AdamW, use 0.0f to disable
         } adamw;
+        enum ggml_opt_optimizer optimizer;
     };
 
     // callback to calculate optimizer parameters prior to a backward pass

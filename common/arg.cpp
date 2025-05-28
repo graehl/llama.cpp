@@ -1085,48 +1085,47 @@ static void common_params_print_completion(common_params_context & ctx_arg) {
     printf("    esac\n");
     printf("}\n\n");
 
-    std::set<std::string> executables = {
-        "llama-batched",
-        "llama-batched-bench",
-        "llama-bench",
-        "llama-cli",
-        "llama-convert-llama2c-to-ggml",
-        "llama-cvector-generator",
-        "llama-embedding",
-        "llama-eval-callback",
-        "llama-export-lora",
-        "llama-gen-docs",
-        "llama-gguf",
-        "llama-gguf-hash",
-        "llama-gguf-split",
-        "llama-gritlm",
-        "llama-imatrix",
-        "llama-infill",
-        "llama-mtmd-cli",
-        "llama-llava-clip-quantize-cli",
-        "llama-lookahead",
-        "llama-lookup",
-        "llama-lookup-create",
-        "llama-lookup-merge",
-        "llama-lookup-stats",
-        "llama-parallel",
-        "llama-passkey",
-        "llama-perplexity",
-        "llama-q8dot",
-        "llama-quantize",
-        "llama-qwen2vl-cli",
-        "llama-retrieval",
-        "llama-run",
-        "llama-save-load-state",
-        "llama-server",
-        "llama-simple",
-        "llama-simple-chat",
-        "llama-speculative",
-        "llama-speculative-simple",
-        "llama-tokenize",
-        "llama-tts",
-        "llama-vdot"
-    };
+    std::set<std::string> executables = { "llama-batched",
+                                          "llama-batched-bench",
+                                          "llama-bench",
+                                          "llama-cli",
+                                          "llama-convert-llama2c-to-ggml",
+                                          "llama-cvector-generator",
+                                          "llama-embedding",
+                                          "llama-eval-callback",
+                                          "llama-export-lora",
+                                          "llama-finetune",
+                                          "llama-gen-docs",
+                                          "llama-gguf",
+                                          "llama-gguf-hash",
+                                          "llama-gguf-split",
+                                          "llama-gritlm",
+                                          "llama-imatrix",
+                                          "llama-infill",
+                                          "llama-mtmd-cli",
+                                          "llama-llava-clip-quantize-cli",
+                                          "llama-lookahead",
+                                          "llama-lookup",
+                                          "llama-lookup-create",
+                                          "llama-lookup-merge",
+                                          "llama-lookup-stats",
+                                          "llama-parallel",
+                                          "llama-passkey",
+                                          "llama-perplexity",
+                                          "llama-q8dot",
+                                          "llama-quantize",
+                                          "llama-qwen2vl-cli",
+                                          "llama-retrieval",
+                                          "llama-run",
+                                          "llama-save-load-state",
+                                          "llama-server",
+                                          "llama-simple",
+                                          "llama-simple-chat",
+                                          "llama-speculative",
+                                          "llama-speculative-simple",
+                                          "llama-tokenize",
+                                          "llama-tts",
+                                          "llama-vdot" };
 
     for (const auto& exe : executables) {
         printf("complete -F _llama_completions %s\n", exe.c_str());
@@ -1238,6 +1237,8 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
     }
     sampler_type_names.pop_back();
 
+    params.optimize             = ggml_opt_get_default_optimizer_params(NULL);
+    params.optimize.adamw.alpha = 1e-8;  // default 1e-3 is much too high for LLAMA_EXAMPLE_FINETUNE
 
     /**
      * filter options by example
@@ -2181,6 +2182,22 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             params.ppl_output_type = value;
         }
     ).set_examples({LLAMA_EXAMPLE_PERPLEXITY}));
+    add_opt(common_arg({ "-lr", "--learning-rate" }, "ALPHA",
+                       string_format("adamw optimizer alpha (default: %.1f)", (double) params.optimize.adamw.alpha),
+                       [](common_params & params, const std::string & value) {
+                           params.optimize.adamw.alpha = std::stof(value);
+                       })
+                .set_examples({ LLAMA_EXAMPLE_FINETUNE }));
+    add_opt(common_arg({ "-opt", "--optimizer" }, "sgd|adamw", "adamw or //TODO:sgd",
+                       [](common_params & params, const std::string & name) {
+                           params.optimize.optimizer = named_ggml_opt_optimizer(name.c_str());
+                           if (params.optimize.optimizer == GGML_OPT_OPTIMIZER_COUNT) {
+                               throw std::invalid_argument("invalid --optimizer (try adamw)");
+                           } else if (params.optimize.optimizer == GGML_OPT_OPTIMIZER_SGD) {
+                               throw std::invalid_argument("TODO: implement SGD");
+                           }
+                       })
+                .set_examples({ LLAMA_EXAMPLE_FINETUNE }));
     add_opt(common_arg(
         {"-dt", "--defrag-thold"}, "N",
         string_format("KV cache defragmentation threshold (default: %.1f, < 0 - disabled)", (double)params.defrag_thold),
