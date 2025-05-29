@@ -353,6 +353,8 @@ struct common_params {
 
     // finetune
     struct ggml_opt_optimizer_params optimize;
+    unsigned                         epochs = 2;
+
     // embedding
     bool embedding         = false; // get only sentence embedding
     int32_t embd_normalize = 2;     // normalisation for embeddings (-1=none, 0=max absolute int16, 1=taxicab, 2=euclidean, >2=p-norm)

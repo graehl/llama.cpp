@@ -38,7 +38,6 @@ int main(int argc, char ** argv) {
     common_init();
     llama_backend_init();
     llama_numa_init(params.numa);
-
     // load the model and apply lora adapter, if any
     common_init_result llama_init = common_init_from_params(params);
     llama_model_ptr   & model = llama_init.model;
@@ -61,7 +60,16 @@ int main(int argc, char ** argv) {
     ggml_opt_dataset_t dataset = common_opt_dataset_init(ctx.get(), tokens, llama_n_ctx(ctx.get())/2);
 
     struct ggml_opt_optimizer_params & optimizer_params = params.optimize;
-    LOG_INF("-optimizer %d -lr: %.1f", optimizer_params.optimizer, (double) optimizer_params.adamw.alpha);
+    if (optimizer_params.optimizer == GGML_OPT_OPTIMIZER_SGD) {
+        double was = (double) optimizer_params.common.alpha;
+        double by  = 1e2;
+        double to  = was * by;
+        LOG_INF("sgd multiplying -lr by %.3g (no momentum) from -lr: %.2g to %.2g\n", by, was, to);
+        optimizer_params.common.alpha = to;
+    }
+
+    LOG_INF("-optimizer %s -lr %.2g -wd %.2g -epochs %d\n", ggml_opt_optimizer_name(optimizer_params.optimizer),
+            (double) optimizer_params.common.alpha, (double) optimizer_params.common.wd, params.epochs);
 
     struct llama_opt_params lopt_params {
         /*n_ctx_train     =*/ 0,
@@ -77,7 +85,7 @@ int main(int argc, char ** argv) {
     ggml_opt_result_t result_train = ggml_opt_result_init();
     ggml_opt_result_t result_eval  = ggml_opt_result_init();
 
-    for (int epoch = 0; epoch < 2; ++epoch) {
+    for (unsigned epoch = 0; epoch < params.epochs; ++epoch) {
         llama_opt_epoch(ctx.get(), dataset, result_train, result_eval, idata_split,
             ggml_opt_epoch_callback_progress_bar, ggml_opt_epoch_callback_progress_bar);
         fprintf(stderr, "\n");
