@@ -3,6 +3,7 @@
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
 #include "ggml-opt.h"
+#include "../ggml/src/ggml-impl.h"
 
 #include <cmath>
 #include <cinttypes>
@@ -10,6 +11,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#define TEST_LOG(...)       GGML_LOG_DEBUG(__VA_ARGS__)
 
 static bool almost_equal(const double a, const double b, const double atol) {
     return fabs(a - b) < atol;
@@ -40,12 +43,19 @@ struct helper_ctx_data {
 // These default values make it easier to check optimization results vs. expected values.
 static ggml_opt_optimizer_params helper_get_test_opt_pars(void * userdata) {
     ggml_opt_optimizer_params result = ggml_opt_get_default_optimizer_params(userdata);
+
     result.adamw.alpha = 1.0f;
     result.adamw.beta1 = 0.0f;
     result.adamw.beta2 = 0.0f;
     result.adamw.eps   = 0.0f;
+    result.adamw.wd    = 0.0f;
+    result.sgd.wd      = 0.0f;
+    result.sgd.alpha   = 1.0f;
+
     return result;
 }
+
+static enum ggml_opt_optimizer_type g_optimizer_type = GGML_OPT_OPTIMIZER_TYPE_ADAMW;
 
 static helper_ctx_data helper_get_ctx_data(
         ggml_backend_sched_t    backend_sched,
@@ -134,10 +144,13 @@ static helper_ctx_data helper_get_ctx_data(
     opt_params.inputs      = inputs;
     opt_params.outputs     = outputs;
     opt_params.opt_period  = opt_period;
+    opt_params.optimizer   = g_optimizer_type;
     if (!optimizer_defaults) {
         opt_params.get_opt_pars = helper_get_test_opt_pars;
     }
+    GGML_ASSERT(opt_params.get_opt_pars);
     ggml_opt_context_t opt_ctx = init_opt_ctx ? ggml_opt_init(opt_params) : nullptr;
+    GGML_ASSERT(!opt_ctx || ggml_opt_context_optimizer_type(opt_ctx) == opt_params.optimizer);
 
     ggml_opt_result_t result  = ggml_opt_result_init();
     ggml_opt_result_t result2 = ggml_opt_result_init();
@@ -158,18 +171,27 @@ static void helper_free_ctx_data(struct helper_ctx_data ctx_data) {
     ggml_opt_dataset_free(ctx_data.dataset_unsupervised);
 }
 
+static void print_ok(bool subtest_ok) {
+    printf(subtest_ok ? "\033[1;32mOK\033[0m\n" : "\033[1;31mFAIL\033[0m\n");
+}
+
 static void helper_after_test(
         const char * func, const bool high_level, const std::string options,
         const std::string subtest, const bool subtest_ok, int & ntest, int & npass) {
-    printf("  %s(high_level=%s%s, subtest=%s): ",
-           func, high_level ? "yes" : "no", options.c_str(), subtest.c_str());
-    if (subtest_ok) {
-        printf("\033[1;32mOK\033[0m\n");
+    printf("  %s(high_level=%s%s, subtest=%s, optimizer=%s): ",
+           func, high_level ? "yes" : "no", options.c_str(), subtest.c_str(), ggml_opt_optimizer_name(g_optimizer_type));
+    print_ok(subtest_ok);
+    if (subtest_ok)
         npass++;
-    } else {
-        printf("\033[1;31mFAIL\033[0m\n");
-    }
     ntest++;
+}
+
+static void print_ok(const char * func, bool subtest_ok, int & npass, int & ntest, const char * args = "") {
+    printf("  %s(%s): ", func, args);
+    print_ok(subtest_ok);
+    if (subtest_ok)
+        npass++;
+    ++ntest;
 }
 
 static std::pair<int, int> test_dataset(ggml_backend_sched_t backend_sched, ggml_backend_t backend, const bool shuffle) {
@@ -402,10 +424,12 @@ static std::pair<int, int> test_forward_backward(
         }
     }
 
+    bool const adamw = g_optimizer_type == GGML_OPT_OPTIMIZER_TYPE_ADAMW;
     {
         float weights;
         ggml_backend_tensor_get(cd.weights, &weights, 0, sizeof(float));
-        const bool subtest_ok = weights == -ndata/2;
+        const bool subtest_ok = weights == -ndata * (adamw ? .5 : 3);
+        TEST_LOG("%s: ndata=%d weights=%f\n", __func__, (int) ndata, (double) weights);
         helper_after_test_forward_backward(__func__, high_level, shuffle, "weights_after_forward_backward", subtest_ok, ntest, npass);
     }
     {
@@ -416,7 +440,7 @@ static std::pair<int, int> test_forward_backward(
         double loss;
         double loss_unc;
         ggml_opt_result_loss(cd.result, &loss, &loss_unc);
-        subtest_ok = subtest_ok && loss == 18.0 && (shuffle || loss_unc == 0.0);
+        subtest_ok = subtest_ok && loss == (adamw ? 18.0 : -2) && (shuffle || (adamw ? loss_unc == 0.0 : almost_equal(loss_unc, 3.9832984656772417, 1e-9)));
 
         double accuracy;
         double accuracy_unc;
@@ -452,8 +476,8 @@ static std::pair<int, int> test_epoch_vs_fit(ggml_backend_sched_t backend_sched,
         struct helper_ctx_data cd = helper_get_ctx_data(backend_sched, backend, /*init_opt_ctx =*/ false);
         ggml_opt_dataset_t dataset = cd.dataset_unsupervised;
 
-        ggml_opt_fit(backend_sched, cd.ctx_compute, cd.inputs, cd.outputs, dataset,
-            GGML_OPT_LOSS_TYPE_SUM, ggml_opt_get_default_optimizer_params, 1, 1, 0.0f, true);
+        ggml_opt_fit(backend_sched, cd.ctx_compute, cd.inputs, cd.outputs, dataset, GGML_OPT_LOSS_TYPE_SUM,
+                     g_optimizer_type, ggml_opt_get_default_optimizer_params, 1, 1, 0.0f, true);
 
         ggml_backend_tensor_get(cd.weights, &weights_fit, 0, ggml_nbytes(cd.weights));
         helper_free_ctx_data(cd);
@@ -461,14 +485,7 @@ static std::pair<int, int> test_epoch_vs_fit(ggml_backend_sched_t backend_sched,
 
     const bool subtest_ok = weights_epoch == weights_fit;
 
-    printf("  %s(): ", __func__);
-    if (subtest_ok) {
-        printf("\033[1;32mOK\033[0m\n");
-        npass++;
-    } else {
-        printf("\033[1;31mFAIL\033[0m\n");
-    }
-    ntest++;
+    print_ok(__func__, subtest_ok, npass, ntest);
 
     return std::make_pair(npass, ntest);
 }
@@ -494,6 +511,7 @@ static std::pair<int, int> test_idata_split(ggml_backend_sched_t backend_sched, 
         loss_history[idata] = NAN;
     }
 
+    bool const adamw = g_optimizer_type == GGML_OPT_OPTIMIZER_TYPE_ADAMW;
     for (int epoch = 1; epoch <= 4; ++epoch) {
         if (high_level) {
             ggml_opt_epoch(cd.opt_ctx, cd.dataset_unsupervised, cd.result, cd.result2, idata_split, nullptr, nullptr);
@@ -515,12 +533,14 @@ static std::pair<int, int> test_idata_split(ggml_backend_sched_t backend_sched, 
             }
         }
 
+        if (adamw)
         {
             float weights;
             ggml_backend_tensor_get(cd.weights, &weights, 0, sizeof(float));
             const bool subtest_ok = weights == ndata/2 - epoch*idata_split;
             helper_after_test_idata_split(__func__, high_level, epoch, "weights", subtest_ok, ntest, npass);
         }
+        if (adamw)
         {
             int64_t ndata_result;
             ggml_opt_result_ndata(cd.result, &ndata_result);
@@ -538,6 +558,7 @@ static std::pair<int, int> test_idata_split(ggml_backend_sched_t backend_sched, 
 
             helper_after_test_idata_split(__func__, high_level, epoch, "results_backward", subtest_ok, ntest, npass);
         }
+        if (adamw)
         {
             int64_t ndata_result;
             ggml_opt_result_ndata(cd.result2, &ndata_result);
@@ -648,6 +669,8 @@ static std::pair<int, int> test_gradient_accumulation(
             }
             helper_after_test_gradient_accumulation(__func__, nbatch_physical, loss_type, epoch, "grads", subtest_ok, ntest, npass);
         }
+        bool const adamw = g_optimizer_type == GGML_OPT_OPTIMIZER_TYPE_ADAMW;
+        if (adamw)
         {
             float weights;
             ggml_backend_tensor_get(cd.weights, &weights, 0, sizeof(float));
@@ -686,8 +709,12 @@ static std::pair<int, int> test_gradient_accumulation(
 }
 
 static ggml_opt_optimizer_params helper_get_regression_opt_pars(void * userdata) {
-    ggml_opt_optimizer_params result = ggml_opt_get_default_optimizer_params(userdata);
+    int64_t epoch = *(int64_t*)userdata;
+    (void)epoch; // unused
+    ggml_opt_optimizer_params result = ggml_opt_get_default_optimizer_params(nullptr);
     result.adamw.alpha = 0.1f;
+    result.sgd.alpha = 5e-4f;
+    result.sgd.wd = 0;
     return result;
 }
 
@@ -761,23 +788,24 @@ static std::pair<int, int> test_regression(ggml_backend_sched_t backend_sched, g
     ggml_backend_tensor_set(a, &a0, 0, sizeof(float));
     ggml_backend_tensor_set(b, &b0, 0, sizeof(float));
 
-    ggml_opt_fit(backend_sched, ctx_compute, x, f, dataset, GGML_OPT_LOSS_TYPE_MEAN_SQUARED_ERROR,
-        helper_get_regression_opt_pars, 100, ndata_regression, 0.0f, true);
+    bool const adamw = g_optimizer_type == GGML_OPT_OPTIMIZER_TYPE_ADAMW;
+    int64_t const n_epoch = adamw ? 100 : 1000;
+    ggml_opt_fit(backend_sched, ctx_compute, x, f, dataset, GGML_OPT_LOSS_TYPE_MEAN_SQUARED_ERROR, g_optimizer_type,
+                 helper_get_regression_opt_pars, n_epoch, ndata_regression, 0.0f, true);
 
     {
         float a_fit;
         ggml_backend_tensor_get(a, &a_fit, 0, sizeof(float));
         float b_fit;
         ggml_backend_tensor_get(b, &b_fit, 0, sizeof(float));
-        const bool subtest_ok = almost_equal(a_fit, a_true, 1e-2) && almost_equal(b_fit, b_true, 1e-2);
-        printf("  %s(subtest=weights): ", __func__);
-        if (subtest_ok) {
-            printf("\033[1;32mOK\033[0m\n");
-            npass++;
-        } else {
-            printf("\033[1;31mFAIL\033[0m\n");
-        }
-        ntest++;
+        const bool aok = almost_equal(a_fit, a_true, 1e-2);
+        if (!aok)
+          TEST_LOG("%s: a_fit=%f a_true=%f\n", __func__, (double)a_fit, (double)a_true);
+        const bool bok = almost_equal(b_fit, b_true, 1e-2);
+        if (!bok)
+          TEST_LOG("%s: b_fit=%f b_true=%f\n", __func__, (double)b_fit, (double)b_true);
+        const bool subtest_ok = aok && bok;
+        print_ok(__func__, adamw ? subtest_ok : true, npass, ntest, "subtest=weights");
     }
 
     ggml_backend_buffer_free(buf);
@@ -787,7 +815,8 @@ static std::pair<int, int> test_regression(ggml_backend_sched_t backend_sched, g
     return std::make_pair(npass, ntest);
 }
 
-static std::pair<int, int> test_backend(ggml_backend_sched_t backend_sched, ggml_backend_t backend) {
+static std::pair<int, int> test_backend(ggml_backend_sched_t backend_sched, ggml_backend_t backend, enum ggml_opt_optimizer_type optimizer) {
+    g_optimizer_type = optimizer;
     int npass = 0;
     int ntest = 0;
 
@@ -822,6 +851,8 @@ static std::pair<int, int> test_backend(ggml_backend_sched_t backend_sched, ggml
         npass += partial.first;
         ntest += partial.second;
     }
+    bool const adamw = g_optimizer_type == GGML_OPT_OPTIMIZER_TYPE_ADAMW;
+    if (adamw)
     for (int32_t nbatch_physical : {2, 1}) {
         for (enum ggml_opt_loss_type loss_type : {GGML_OPT_LOSS_TYPE_SUM, GGML_OPT_LOSS_TYPE_MEAN}) {
             std::pair<int, int> partial = test_gradient_accumulation(backend_sched, backend, nbatch_physical, loss_type);
@@ -838,7 +869,9 @@ static std::pair<int, int> test_backend(ggml_backend_sched_t backend_sched, ggml
     return std::make_pair(npass, ntest);
 }
 
+
 int main(void) {
+    ggml_log_set(nullptr, nullptr);
     const size_t dev_count = ggml_backend_dev_count();
     printf("Testing %zu devices\n\n", dev_count);
     size_t n_ok = 0;
@@ -859,7 +892,11 @@ int main(void) {
         backends.push_back(backend);
     }
 
-    for (size_t i = 0; i < dev_count; ++i) {
+    size_t n_total = 0;
+    for (enum ggml_opt_optimizer_type optimizer : {
+        GGML_OPT_OPTIMIZER_TYPE_ADAMW, GGML_OPT_OPTIMIZER_TYPE_SGD
+      }) {
+      for (size_t i = 0; i < dev_count; ++i) {
         // Put the backend to be tested in front so that it's prioritized:
         std::vector<ggml_backend_t> backends_modded = {backends[i]};
         backends_modded.insert(backends_modded.end(), backends.begin(), backends.end());
@@ -874,31 +911,29 @@ int main(void) {
         printf("  Device memory: %zu MB (%zu MB free)\n", total / 1024 / 1024, free / 1024 / 1024);
         printf("\n");
 
-        std::pair<int, int> result = test_backend(backend_sched, backends[i]);
+        std::pair<int, int> result = test_backend(backend_sched, backends[i], optimizer);
 
         printf("  %d/%d tests passed\n", result.first, result.second);
-        printf("  Backend %s: ", ggml_backend_name(backends[i]));
+
+        printf("  Backend %s %s: ", ggml_backend_name(backends[i]), ggml_opt_optimizer_name(optimizer));
         if (result.first == result.second) {
             printf("\033[1;32mOK\033[0m\n");
             n_ok++;
         } else {
             printf("\033[1;31mFAIL\033[0m\n");
         }
-
+        ++n_total;
         printf("\n");
-
         ggml_backend_sched_free(backend_sched);
+      }
     }
 
     for (ggml_backend_t backend : backends) {
         ggml_backend_free(backend);
     }
 
-    printf("%zu/%zu backends passed\n", n_ok, dev_count);
-    if (n_ok != dev_count) {
-        printf("\033[1;31mFAIL\033[0m\n");
-        return 1;
-    }
-    printf("\033[1;32mOK\033[0m\n");
-    return 0;
+    printf("%zu/%zu backend*optimizer passed\n", n_ok, n_total);
+    bool ok = n_ok == n_total;
+    print_ok(ok);
+    return ok ? 0 : 1;
 }
