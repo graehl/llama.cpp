@@ -178,6 +178,10 @@ struct common_params_sampling {
 
     std::vector<llama_logit_bias> logit_bias; // logit biases to apply
 
+    float eog_bias_per_tok = 0; // escalating bias added to eog per token after:
+    /// this many remaining tokens (before applying eog_bias_per_tok)
+    float start_eog_at_remain = 0;
+
     // print the parameters into a string
     std::string print() const;
 };

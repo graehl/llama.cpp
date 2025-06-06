@@ -1942,6 +1942,20 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_sparam());
     add_opt(common_arg(
+        {"-eog", "--eog-bias-per-tok"}, "N",
+        string_format("when fewer than -start-eog-at-remain tokens are left to generate after -n, add this bias eog for each subsequent token (default: %.1f)", (double)params.sampling.eog_bias_per_tok),
+        [](common_params & params, const std::string & value) {
+            params.sampling.eog_bias_per_tok = std::stof(value);
+        }
+    ).set_sparam());
+    add_opt(common_arg(
+        {"-remain", "--start-eog-at-remain"}, "N",
+        string_format("start applying -eog bias when this many tokens remain of the -n max (default: %.1f)", (double)params.sampling.start_eog_at_remain),
+        [](common_params & params, const std::string & value) {
+            params.sampling.start_eog_at_remain = std::stof(value);
+        }
+    ).set_sparam());
+    add_opt(common_arg(
         {"--grammar"}, "GRAMMAR",
         string_format("BNF-like grammar to constrain generations (see samples in grammars/ dir) (default: '%s')", params.sampling.grammar.c_str()),
         [](common_params & params, const std::string & value) {
